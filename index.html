@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><meta name="theme-color" content="#100b20"/><meta name="description" content="Step into AFTERLIFE, a candlelit 3D celebration of marigolds, music and mischief."/><title>AFTERLIFE — The Halloween Afterparty</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"/></head>
+<body>
+<div id="world" aria-label="Interactive 3D nighttime festival plaza"></div>
+<div class="vignette" aria-hidden="true"></div>
+<header class="masthead"><div class="brand"><span class="brand-flower" aria-hidden="true">✺</span><div><h1>AFTERLIFE</h1><p>The Halloween Afterparty</p></div></div><div class="top-actions"><button id="motion" aria-label="Pause ambient animation" title="Pause ambient animation">Pause motion</button><button id="fullscreen" aria-label="Enter fullscreen" title="Fullscreen">⛶</button></div></header>
+<div class="scene-caption"><span class="eyebrow">A NIGHT BETWEEN WORLDS</span><p>Follow the marigolds.<br/>Stay for the afterparty.</p></div>
+<footer class="controls"><div class="view-picker" role="group" aria-label="Camera destinations"><button data-view="plaza" class="selected" aria-pressed="true">The plaza</button><button data-view="ofrenda" aria-pressed="false">The ofrenda</button><button data-view="arch" aria-pressed="false">Marigold walk</button><button data-view="market" aria-pressed="false">Night market</button><button data-view="garden" aria-pressed="false">Lantern garden</button><button data-view="above" aria-pressed="false">From above</button></div><div class="control-line"><p id="hint">Drag to look around <span>·</span> Scroll to explore <span>·</span> WASD to travel</p><button id="dance">Start a dance ♫</button><button id="tour" aria-pressed="false">Take a tour <span aria-hidden="true">↗</span></button><button id="hide-ui" title="Hide controls (H)">Hide UI</button></div></footer>
+<aside id="guest-toast" role="status" aria-live="polite" hidden><strong id="guest-name"></strong><p id="guest-quote"></p></aside>
+<button id="restore-ui" hidden>Show controls</button>
+<div id="loading" role="status"><span class="loading-flower">✺</span><p>Lighting the candles…</p></div>
+<div id="error" hidden role="alert"><h2>The plaza needs WebGL 2</h2><p>Try a recent browser with hardware acceleration enabled.</p></div>
+<script type="module" src="/src/main.js"></script>
+</body></html>
