@@ -10,7 +10,11 @@ Use **QR / invite** on the projector to let phones join the same town. Players e
 
 OpenAI Decisions assigns a pumpkin, ghost or reaper identity. Image 2.5 generates a portrait asynchronously while a matching procedural 3D avatar enters the world. Other participants see nicknames, movement and emotes through Supabase Realtime.
 
-The AI Overlord chooses a shared event every 20 seconds while players are connected: a pumpkin takeover, a ghost dance or a monster election. Elections allow one vote per guest, which can be changed until voting closes. If OpenAI is unavailable, the app labels the party draw or scheduled host fallback explicitly.
+The AI Overlord starts a shared event about every 20 seconds while players are connected (plus API latency): a pumpkin takeover, a ghost dance or a monster election. Every round includes all three events before repeating. When only one event remains, the app labels the deterministic variety round. Elections allow one vote per guest, which can be changed until voting closes. If OpenAI is unavailable, the app labels the party draw or scheduled host fallback explicitly.
+
+A real 3D Reaper chases each player locally without extra API calls. Getting caught respawns you in the plaza. Movement and the hunter pause during a takeover. Buildings, arches, planters, benches and grave markers have ground collision; paths route the hunter around obstacles. This is a client side party game, not a server authoritative competitive simulation.
+
+The host can use **Stop Overlord** to end the current takeover and stop new events for everyone, then **Resume Overlord** to restart the countdown. Host access is tied to the existing Mirco guest session, not a nickname match.
 
 ## Run locally
 
@@ -53,7 +57,9 @@ npm run preview
 | Shared player movement, nicknames and emotes | Implemented; two independent Realtime clients verified |
 | Matching predefined 3D monster avatars | Implemented for pumpkin, ghost and reaper |
 | AI Overlord events every 20 seconds | Implemented; live Decisions event tested |
-| Expanded town and animated KitBitz atmosphere | Implemented |
+| Expanded town and animated procedural 3D ambient guests | Implemented |
+| Reaper chase, respawn and environment collision | Implemented |
+| Host stop and resume | Implemented |
 
 The demo is not load tested for 1,000 concurrent players. Movement is persisted at up to two updates per second per moving player, with interpolation and a display cap of 100 player avatars. High attendance will require spatial channels and a dedicated movement transport.
 
@@ -71,12 +77,12 @@ Database migration and function source are in `supabase/`. Deployment must retai
 
 ## Source layout
 
-`src/world.js` builds the environment using merged geometry and instanced decorations. `src/textures.js` draws original procedural textures. `src/characters.js` places and animates KitBitz artwork. `src/main.js` handles rendering, cameras and controls.
+`src/world.js` builds the environment using merged geometry and instanced decorations. `src/textures.js` draws original procedural textures. `src/characters.js` places and animates procedural 3D guests. `src/navigation.js` handles ground collision and pathfinding; `src/hunter.js` runs the local Reaper chase. `src/main.js` handles rendering, cameras and controls.
 
 The approved concept is saved in `docs/visual-target.png`. The image is a visual reference, not the rendered scene or a background substituted for geometry.
 
 ## Credits
 
-Character illustrations are from [KitBitz Halloween Kit](https://kitbitz.art/kits/halloween-kit), listed as CC0 by KitBitz. Exact asset names and sources are recorded in [ASSETS.md](ASSETS.md). Original procedural environment and concept art were created for this project.
+Archived character illustrations from the initial prototype are from [KitBitz Halloween Kit](https://kitbitz.art/kits/halloween-kit), listed as CC0 by KitBitz. Exact asset names and sources are recorded in [ASSETS.md](ASSETS.md). The active scene now uses original procedural 3D monsters instead of those cutouts. Decorative skull textures, name labels and portrait cards remain 2D surfaces, as appropriate. Original procedural environment and concept art were created for this project.
 
 Built with Three.js and Vite. Fonts: Rye and Barlow from Google Fonts.

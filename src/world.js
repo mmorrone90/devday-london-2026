@@ -1,9 +1,10 @@
 import * as T from 'three';
+import { createNavigation } from './navigation.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {rand,stoneTexture,plasterTexture,rosetteTexture,skullTexture,papelTexture,glowTexture,mosaicTexture} from './textures.js';
 
 export function createWorld(scene) {
-  const staticParts=new Map(), instances=new Map();
+  const staticParts=new Map(), instances=new Map(), colliders=[];
   const unitBox=new T.BoxGeometry(1,1,1), unitSphere=new T.SphereGeometry(1,8,6), dummy=new T.Object3D();
   const mat=(color,opts={})=>new T.MeshStandardMaterial({color,roughness:.9,...opts});
   const plaster=plasterTexture(); plaster.wrapS=plaster.wrapT=T.RepeatWrapping; plaster.repeat.set(3,3);
@@ -12,19 +13,20 @@ export function createWorld(scene) {
     const g=geo.index ? geo.toNonIndexed() : geo.clone();dummy.position.set(...pos);dummy.scale.set(...scale);dummy.rotation.set(...rot);dummy.updateMatrix();g.applyMatrix4(dummy.matrix);
     if(!staticParts.has(material))staticParts.set(material,[]);staticParts.get(material).push(g);
   }
-  function box(material,x,y,z,w,h,d,ry=0){batch(unitBox,material,[x,y,z],[w,h,d],[0,ry,0]);}
-  function sphere(material,x,y,z,sx,sy=sx,sz=sx){batch(unitSphere,material,[x,y,z],[sx,sy,sz]);}
+  function box(material,x,y,z,w,h,d,ry=0){batch(unitBox,material,[x,y,z],[w,h,d],[0,ry,0]);if(y-h/2<1.7&&y+h/2>.45&&Math.max(w,d)>.2)colliders.push({type:'box',x,z,w:Math.abs(w*Math.cos(ry))+Math.abs(d*Math.sin(ry)),d:Math.abs(d*Math.cos(ry))+Math.abs(w*Math.sin(ry))});}
+  function sphere(material,x,y,z,sx,sy=sx,sz=sx){batch(unitSphere,material,[x,y,z],[sx,sy,sz]);if(y-sy<1.7&&y+sy>.45&&Math.max(sx,sz)>.2)colliders.push({type:'circle',x,z,r:Math.max(sx,sz)});}
   function inst(key,geo,material,x,y,z,sx=1,sy=sx,sz=sx,rx=0,ry=0,rz=0){
     if(!instances.has(key))instances.set(key,{geo,material,items:[]});instances.get(key).items.push({x,y,z,sx,sy,sz,rx,ry,rz});
   }
-  function cyl(material,x,y,z,rt,rb,h,n=16){batch(new T.CylinderGeometry(rt,rb,h,n),material,[x,y,z]);}
+  function cyl(material,x,y,z,rt,rb,h,n=16){batch(new T.CylinderGeometry(rt,rb,h,n),material,[x,y,z]);if(y-h/2<1.7&&y+h/2>.45&&Math.max(rt,rb)>.15)colliders.push({type:'circle',x,z,r:Math.max(rt,rb)});}
   function line(points,material,r=.025){batch(new T.TubeGeometry(new T.CatmullRomCurve3(points.map(p=>new T.Vector3(...p))),Math.max(8,points.length*3),r,5,false),material);}
   const diskGeo=new T.PlaneGeometry(1,1), glowMat=new T.MeshBasicMaterial({map:glowTexture(),transparent:true,depthWrite:false,blending:T.AdditiveBlending,opacity:.28});
   function glow(x,y,z,size=2){inst('ground-glows',diskGeo,glowMat,x,y+.015,z,size,size,size,-Math.PI/2);}
   function light(x,y,z,intensity=22,distance=9,color='#ff982c'){const l=new T.PointLight(color,intensity,distance,2);l.position.set(x,y,z);scene.add(l);return l;}
   function archShape(w,h){const s=new T.Shape();s.moveTo(-w/2,0);s.lineTo(w/2,0);s.lineTo(w/2,h-w/2);s.absarc(0,h-w/2,w/2,0,Math.PI,false);s.lineTo(-w/2,0);return s;}
-  function archSolid(material,x,y,z,w,h,depth=.12){batch(new T.ExtrudeGeometry(archShape(w,h),{depth,bevelEnabled:false,curveSegments:20}),material,[x,y,z]);}
+  function archSolid(material,x,y,z,w,h,depth=.12){if(y<1.7&&y+h>.45)colliders.push({type:'box',x,z:z+depth/2,w,d:depth});batch(new T.ExtrudeGeometry(archShape(w,h),{depth,bevelEnabled:false,curveSegments:20}),material,[x,y,z]);}
   function archRing(material,x,y,z,w,h,thickness=.3,depth=.5){
+    if(y<1.7)for(const side of [-1,1])colliders.push({type:'box',x:x+side*(w/2-thickness/2),z:z+depth/2,w:thickness,d:depth});
     // One continuous U-shaped outline. A hole extending outside the outer
     // contour produces invalid triangles and angle-dependent flashing.
     const outer=new T.Shape(),r=w/2,inner=r-thickness,cy=h-r;
@@ -241,5 +243,5 @@ export function createWorld(scene) {
   const starPositions=[];for(let i=0;i<700;i++){const a=rand()*6.28,e=.2+rand()*1.2;starPositions.push(Math.cos(a)*Math.cos(e)*140,Math.sin(e)*140,Math.sin(a)*Math.cos(e)*140);}
   const starsGeo=new T.BufferGeometry();starsGeo.setAttribute('position',new T.Float32BufferAttribute(starPositions,3));scene.add(new T.Points(starsGeo,new T.PointsMaterial({color:'#c3c6e6',size:.15,sizeAttenuation:true,transparent:true,opacity:.65})));
   const moon=new T.Mesh(new T.SphereGeometry(2,24,16),new T.MeshBasicMaterial({color:'#d9d8f4'}));moon.position.set(-52,66,-100);scene.add(moon);
-  return {update(t){timeUniform.value=t;for(let i=0;i<emberCount;i++){const v=emberSeeds[i];emberPositions[i*3]=v.x+Math.sin(t*.3+i)*.6;emberPositions[i*3+1]=(v.y+t*v.speed)%12;emberPositions[i*3+2]=v.z+Math.cos(t*.2+i)*.5;}emberGeo.attributes.position.needsUpdate=true;m.flame.color.setRGB(5.2+Math.sin(t*3.7)*.25,2.7+Math.sin(t*4.2)*.15,.6);},counts:{flowers:[...instances.entries()].filter(([k])=>k.startsWith('flowers')).reduce((n,[k,v])=>n+v.items.length,0),candles:instances.get('candles').items.length}};
+  return {navigation:createNavigation(colliders),update(t){timeUniform.value=t;for(let i=0;i<emberCount;i++){const v=emberSeeds[i];emberPositions[i*3]=v.x+Math.sin(t*.3+i)*.6;emberPositions[i*3+1]=(v.y+t*v.speed)%12;emberPositions[i*3+2]=v.z+Math.cos(t*.2+i)*.5;}emberGeo.attributes.position.needsUpdate=true;m.flame.color.setRGB(5.2+Math.sin(t*3.7)*.25,2.7+Math.sin(t*4.2)*.15,.6);},counts:{flowers:[...instances.entries()].filter(([k])=>k.startsWith('flowers')).reduce((n,[k,v])=>n+v.items.length,0),candles:instances.get('candles').items.length}};
 }

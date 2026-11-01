@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {createNavigation} from '../src/navigation.js';
+const nav=createNavigation([{type:'box',x:0,z:0,w:2,d:8},{type:'circle',x:10,z:4,r:2}]);
+const p={x:-4,z:0};nav.move(p,12,0);assert(p.x<-1.5,'Large movements cannot tunnel through a wall');
+nav.move(p,3,3);assert(p.z>2.9&&p.x<-1.5,'Blocked movement slides along walls');
+assert(!nav.clear(10,4));const free=nav.free(10,4);assert(nav.clear(free.x,free.z),'Spawn is moved out of solid props');
+assert(!nav.segmentClear({x:-3,z:0},{x:3,z:0},.1),'Catch cannot reach through a wall');
+const route=nav.path({x:-4,z:0},{x:4,z:0});assert(route.length>0,'Hunter finds a route around a wall');
+assert(route.some(p=>Math.abs(p.z)>4),'Route passes around the wall end');
+for(const waypoint of route)assert(nav.clear(waypoint.x,waypoint.z,.65),'Every waypoint clears obstacles');
+const runner={x:-4,z:0};for(const target of route){for(let frame=0;frame<100;frame++){const dx=target.x-runner.x,dz=target.z-runner.z,d=Math.hypot(dx,dz);if(d<.05)break;nav.move(runner,dx/d*Math.min(.06,d),dz/d*Math.min(.06,d),.65);assert(nav.clear(runner.x,runner.z,.65));}}assert(Math.hypot(runner.x-4,runner.z)<.1,'Hunter can follow the complete collision-free route');
+const edge={x:47,z:47};nav.move(edge,20,20);assert(edge.x<=47.45&&edge.z<=47.45,'World bounds are solid');
+console.log('PASS: wall tunneling, sliding, safe spawning, prop collision, world bounds and hunter pathfinding.');

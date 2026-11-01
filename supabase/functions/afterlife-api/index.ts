@@ -19,7 +19,7 @@ function fail(message:string,status=400):never{throw Object.assign(new Error(mes
 async function hash(value:string){return [...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value)))].map(x=>x.toString(16).padStart(2,'0')).join('');}
 function validToken(value:string){return /^[a-f0-9]{64}$/.test(value);}
 function selfie(value:unknown){if(!value)return null;if(typeof value!=='string'||value.length>1000000||!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(value))fail('Choose a smaller JPEG, PNG or WebP photo.');return value;}
-async function session(req:Request){const token=req.headers.get('x-player-token')??'';if(!validToken(token))fail('Join the party first.',401);const {data,error}=await db.from('afterlife_sessions').select('player_id,created_at,image_state').eq('token_hash',await hash(token)).maybeSingle();if(error)fail('The party database is unavailable.',503);if(!data||Date.now()-Date.parse(data.created_at)>86400000)fail('Your guest pass has expired. Join again.',401);return data;}
+async function session(req:Request){const token=req.headers.get('x-player-token')??'';if(!validToken(token))fail('Join the party first.',401);const {data,error}=await db.from('afterlife_sessions').select('player_id,created_at,image_state,is_host').eq('token_hash',await hash(token)).maybeSingle();if(error)fail('The party database is unavailable.',503);if(!data||Date.now()-Date.parse(data.created_at)>86400000)fail('Your guest pass has expired. Join again.',401);return data;}
 async function player(id:string){const {data,error}=await db.from('afterlife_players').select('*').eq('id',id).single();if(error)fail('Guest not found.',404);return data;}
 async function decision(name:string,instructions:string,choices:{value:string;description:string}[],evidence:unknown,image:string|null=null){
  if(!key())return null;
@@ -30,17 +30,17 @@ async function decision(name:string,instructions:string,choices:{value:string;de
  return answer?.type==='choice'&&choices.some(c=>c.value===answer.choice)?answer.choice:null;
 }
 async function state(){
- const [players,s,events]=await Promise.all([db.from('afterlife_players').select('*').gt('updated_at',new Date(Date.now()-65000).toISOString()).limit(1000),db.from('afterlife_state').select('next_event_at,event_id').eq('id','plaza').single(),db.from('afterlife_events').select('*').order('starts_at',{ascending:false}).limit(1)]);
+ const [players,s,events]=await Promise.all([db.from('afterlife_players').select('*').gt('updated_at',new Date(Date.now()-65000).toISOString()).limit(1000),db.from('afterlife_state').select('next_event_at,event_id,overlord_paused,control_revision').eq('id','plaza').single(),db.from('afterlife_events').select('*').order('starts_at',{ascending:false}).limit(1)]);
  if(players.error||s.error||events.error){console.warn('State query error',players.error?.code,players.error?.message,s.error?.code,s.error?.message,events.error?.code,events.error?.message);fail('The town is reconnecting. Try again shortly.',503);}
- const event=events.data?.[0]??null;
+ const event=s.data.overlord_paused?null:events.data?.[0]??null;
  const {data:votes}=event?await db.from('afterlife_votes').select('candidate').eq('event_id',event.id):{data:[]};
  const tally=Object.fromEntries(kinds.map(k=>[k,(votes??[]).filter(v=>v.candidate===k).length]));
- return {players:players.data,event,next_event_at:s.data.next_event_at,tally,ai_enabled:Boolean(key()),server_time:iso()};
+ return {players:players.data,event,next_event_at:s.data.next_event_at,overlord_paused:s.data.overlord_paused,control_revision:s.data.control_revision,tally,ai_enabled:Boolean(key()),server_time:iso()};
 }
 async function join(req:Request,body:Record<string,unknown>){
  const token=String(body.token??'');if(!validToken(token))fail('Invalid guest pass. Reload and try again.');
- const digest=await hash(token),old=await db.from('afterlife_sessions').select('player_id').eq('token_hash',digest).maybeSingle();
- if(old.data)return {player:await player(old.data.player_id),ai_enabled:Boolean(key())};
+ const digest=await hash(token),old=await db.from('afterlife_sessions').select('player_id,is_host').eq('token_hash',digest).maybeSingle();
+ if(old.data)return {player:await player(old.data.player_id),can_host:old.data.is_host,ai_enabled:Boolean(key())};
  const nickname=String(body.nickname??'').trim().replace(/[\u0000-\u001f<>]/g,'').slice(0,24);if(!nickname)fail('Give your monster a nickname.');
  const vibe=['chaotic','social','chill'].includes(String(body.vibe))?String(body.vibe):'social';
  const snack=['candy','tacos','coffee'].includes(String(body.snack))?String(body.snack):'candy';
@@ -77,15 +77,18 @@ async function portrait(id:string,image:string|null){
 }
 async function tick(){
  const {data:claimed,error}=await db.rpc('afterlife_claim_tick');if(error)fail('The Overlord is reconnecting.',503);if(!claimed)return {claimed:false};
- const snapshot=await state();let eventKind=Object.keys(eventCopy)[Math.floor(Date.now()/20000)%3],source='party_host';
- try{const picked=await decision('event','Choose the funniest safe event for this shared fictional monster town. Consider faction balance and the previous event; prefer variety. The choice will run predefined game code.',[
+ const snapshot=await state();if(snapshot.overlord_paused)return {claimed:false};
+ const {data:recent,count}=await db.from('afterlife_events').select('kind',{count:'exact'}).order('starts_at',{ascending:false}).limit(2);
+ const used=(recent??[]).slice(0,(count??0)%3).map(e=>e.kind);
+ const choices=[
  {value:'pumpkin_rain',description:'Turn every player into a pumpkin and rain toy pumpkins for 15 seconds.'},
  {value:'ghost_dance',description:'Every monster dances together for 15 seconds.'},
- {value:'monster_election',description:'Hold a 15 second election for pumpkin, ghost or reaper mayor.'}],{counts:Object.fromEntries(kinds.map(k=>[k,snapshot.players.filter(p=>p.kind===k).length])),previous:snapshot.event?.kind});if(picked){eventKind=picked;source='openai_decisions';}}catch{console.warn('Event decision temporarily unavailable');}
- const start=Date.now(),copy=eventCopy[eventKind as keyof typeof eventCopy];
- const {data:event,error:eventError}=await db.from('afterlife_events').insert({kind:eventKind,...copy,source,starts_at:new Date(start).toISOString(),expires_at:new Date(start+15000).toISOString()}).select().single();
+ {value:'monster_election',description:'Hold a 15 second election for pumpkin, ghost or reaper mayor.'}].filter(c=>!used.includes(c.value));
+ let eventKind=choices[Math.floor(Math.random()*choices.length)].value,source=choices.length===1?'party_rotation':'party_host';
+ if(choices.length>1)try{const picked=await decision('event','Choose the funniest safe event for this fictional monster town from the available events. Each event must occur once per round of three.',choices,{counts:Object.fromEntries(kinds.map(k=>[k,snapshot.players.filter(p=>p.kind===k).length])),previous:snapshot.event?.kind});if(picked){eventKind=picked;source='openai_decisions';}}catch{console.warn('Event decision temporarily unavailable');}
+ const copy=eventCopy[eventKind as keyof typeof eventCopy];
+ const {data:event,error:eventError}=await db.rpc('afterlife_publish_event',{p_revision:snapshot.control_revision,p_kind:eventKind,p_title:copy.title,p_message:copy.message,p_source:source});
  if(eventError)fail('Could not start the event.',503);
- await db.from('afterlife_state').update({event_id:event.id,next_event_at:new Date(start+20000).toISOString(),tick_locked_until:iso()}).eq('id','plaza');
  return {claimed:true,event};
 }
 Deno.serve(async req=>{
@@ -93,13 +96,18 @@ Deno.serve(async req=>{
  try{
   const action=new URL(req.url).pathname.split('/').filter(Boolean).pop();
   if(req.method==='GET'&&action==='state')return json(await state());
-  if(req.method==='GET'&&action==='session'){const s=await session(req);return json({player:await player(s.player_id),ai_enabled:Boolean(key())});}
+  if(req.method==='GET'&&action==='session'){const s=await session(req);return json({player:await player(s.player_id),can_host:s.is_host,ai_enabled:Boolean(key())});}
   if(req.method!=='POST')return json({error:'Not found'},404);
   if(Number(req.headers.get('content-length')??0)>1200000)fail('Photo is too large.',413);
   const raw=await req.text();if(raw.length>1200000)fail('Photo is too large.',413);
   const body=raw?JSON.parse(raw):{};
   if(action==='join')return json(await join(req,body));
   const s=await session(req);
+  if(action==='overlord-control'){
+   if(!s.is_host)fail('Only the host can control the Overlord.',403);
+   if(typeof body.paused!=='boolean')fail('Choose stop or resume.');
+   const {error}=await db.rpc('afterlife_set_paused',{p_paused:body.paused});if(error)fail('Could not change the Overlord.',503);return json(await state());
+  }
   if(action==='move'){
    const x=Number(body.x),z=Number(body.z),heading=Number(body.heading??0),sequence=Number(body.sequence);
    if(![x,z,heading,sequence].every(Number.isFinite)||!Number.isSafeInteger(sequence)||sequence<1)fail('Invalid position.');

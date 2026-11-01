@@ -7,6 +7,7 @@ const session=JSON.parse(await readFile(process.argv[2],'utf8'));
 const API=URL+'/functions/v1/afterlife-api/';
 async function call(action,body,token=session.token){const r=await fetch(API+action,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json',...(token?{'x-player-token':token}:{})},...(body===undefined?{}:{body:JSON.stringify(body)})});return {status:r.status,body:await r.json()};}
 const identity=await call('session');assert.equal(identity.status,200);
+const deniedControl=await call('overlord-control',{paused:true});assert.equal(deniedControl.status,403,'Ordinary guests cannot stop the Overlord');
 const unauthorized=await call('move',{x:0,z:0,sequence:99},'');assert.equal(unauthorized.status,401);
 const fake=await call('emote',{emote:'dance'},'a'.repeat(64));assert.equal(fake.status,401);
 const invalid=await call('move',{x:'not-a-number',z:0,sequence:99});assert.equal(invalid.status,400);

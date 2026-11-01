@@ -2,7 +2,7 @@ import * as T from 'three';
 
 const material=(color)=>new T.MeshStandardMaterial({color,roughness:.75});
 function part(root,geo,mat,x,y,z,sx=1,sy=sx,sz=sx){const mesh=new T.Mesh(geo,mat);mesh.position.set(x,y,z);mesh.scale.set(sx,sy,sz);root.add(mesh);return mesh;}
-function makeMonster(kind){
+export function makeMonster(kind){
  const root=new T.Group(),sphere=new T.SphereGeometry(1,12,10),black=material('#17101e'),white=material('#e3fff0'),green=new T.MeshBasicMaterial({color:'#a6ff37'});
  const arms=[];
  if(kind==='pumpkin'){
@@ -32,7 +32,7 @@ function makeMonster(kind){
  root.userData.arms=arms;return root;
 }
 function labelTexture(name,color){const c=document.createElement('canvas');c.width=512;c.height=112;const x=c.getContext('2d');x.fillStyle='#140e22db';x.beginPath();x.roundRect(4,4,504,100,30);x.fill();x.strokeStyle=color;x.lineWidth=4;x.stroke();x.fillStyle='#fff5df';x.font='600 37px Barlow, sans-serif';x.textAlign='center';x.textBaseline='middle';x.fillText(name,256,56,470);const tex=new T.CanvasTexture(c);tex.colorSpace=T.SRGBColorSpace;return tex;}
-export function createPlayerAvatars(scene){
+export function createPlayerAvatars(scene,navigation){
  const actors=new Map();let self=null;
  function upsert(p){let a=actors.get(p.id);if(a){a.data=p;return;}const group=new T.Group(),monster=makeMonster(p.kind);group.add(monster);const tex=labelTexture(p.nickname,p.color),label=new T.Sprite(new T.SpriteMaterial({map:tex,depthTest:true,depthWrite:false}));label.scale.set(3.1,.68,1);label.position.y=3;group.add(label);const shadow=new T.Mesh(new T.CircleGeometry(.65,20),new T.MeshBasicMaterial({color:'#070511',opacity:.3,transparent:true,depthWrite:false}));shadow.rotation.x=-Math.PI/2;shadow.position.y=.08;group.add(shadow);group.position.set(p.x,0,p.z);scene.add(group);actors.set(p.id,{group,monster,label,shadow,data:p,displayKind:p.kind});}
  function disposeObject(object){object.traverse(o=>{if(o.isMesh||o.isSprite){o.geometry?.dispose();for(const m of Array.isArray(o.material)?o.material:[o.material]){m.map?.dispose();m.dispose();}}});}
@@ -45,7 +45,7 @@ export function createPlayerAvatars(scene){
     if(a.displayKind!==kind){a.group.remove(a.monster);disposeObject(a.monster);a.monster=makeMonster(kind);a.group.add(a.monster);a.displayKind=kind;}
     a.group.visible=id===self||visible++<100;if(!a.group.visible)continue;
     const pos=id===self&&local?local:p,dx=pos.x-a.group.position.x,dz=pos.z-a.group.position.z,moving=Math.abs(dx)+Math.abs(dz)>.025;
-    a.group.position.x=T.MathUtils.lerp(a.group.position.x,pos.x,1-Math.exp(-dt*12));a.group.position.z=T.MathUtils.lerp(a.group.position.z,pos.z,1-Math.exp(-dt*12));
+    const current={x:a.group.position.x,z:a.group.position.z};if(id===self||Math.hypot(dx,dz)>6){const safe=navigation.free(pos.x,pos.z,.65);current.x=safe.x;current.z=safe.z;}else navigation.move(current,dx*(1-Math.exp(-dt*12)),dz*(1-Math.exp(-dt*12)),.65);a.group.position.x=current.x;a.group.position.z=current.z;
     a.monster.rotation.y=pos.heading??0;
     const emote=Date.parse(p.emote_until??'')>Date.now()?p.emote:'idle',dance=(active&&event.kind==='ghost_dance')||emote==='dance';
     a.monster.position.y=(kind==='ghost'?.3:0)+Math.sin(t*(dance?9:moving?8:2)+p.x)*((dance||moving)?.13:.035);
