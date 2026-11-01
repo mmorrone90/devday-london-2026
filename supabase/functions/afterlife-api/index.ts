@@ -71,7 +71,7 @@ async function portrait(id:string,image:string|null){
   const bytes=Uint8Array.from(atob(b64),c=>c.charCodeAt(0)),path=id+'.webp';
   const uploaded=await db.storage.from('afterlife-portraits').upload(path,bytes,{contentType:'image/webp',upsert:true});if(uploaded.error)throw new Error('Portrait storage failed');
   const portraitUrl=db.storage.from('afterlife-portraits').getPublicUrl(path).data.publicUrl;
-  await db.from('afterlife_players').update({portrait_url:portraitUrl,portrait_status:'ready',updated_at:iso()}).eq('id',id);
+  await db.from('afterlife_players').update({portrait_url:portraitUrl,portrait_status:'ready'}).eq('id',id);
   await db.from('afterlife_sessions').update({image_state:'ready'}).eq('player_id',id);
  }catch(e){console.warn('Portrait failed',e instanceof Error?e.message:'unknown');await db.from('afterlife_players').update({portrait_status:'failed'}).eq('id',id);await db.from('afterlife_sessions').update({image_state:'failed'}).eq('player_id',id);}
 }

@@ -12,10 +12,10 @@ const byId=id=>document.getElementById(id);
 const icons={pumpkin:'🎃',ghost:'👻',reaper:'💀'};
 export function createGame(scene,camera,controls,{toast,onDance,stopDance,navigation}){
  const avatars=createPlayerAvatars(scene,navigation),players=new Map(),hunter=createHunter(scene,navigation);
- let overlordPaused=false,canHost=false;
+ let overlordPaused=false,canHost=false,leaving=false,pendingMove=null;
  let me=null,local=null,token=localStorage.getItem(tokenKey),event=null,nextEvent=null,photo=null,sequence=0,lastSend=0,sending=false,lastPoll=0,eventSeen=null,connected=false,voteTally={},clockOffset=0,lastTick=0,tickPending=false;
  const movement=new Set(),direction=new T.Vector3(),right=new T.Vector3(),delta=new T.Vector3();
- const joinDialog=byId('join-dialog'),shareDialog=byId('share-dialog');
+ const joinDialog=byId('join-dialog'),shareDialog=byId('share-dialog'),leaveDialog=byId('leave-dialog');
  function status(text){byId('connection-status').textContent=text;}
  async function request(action,body,method='POST'){
   const r=await fetch(API+action,{method,headers:{'Content-Type':'application/json',...(token?{'x-player-token':token}:{})},...(body===undefined?{}:{body:JSON.stringify(body)})});let j;try{j=await r.json();}catch{throw new Error('The party connection is unavailable.');}if(!r.ok)throw new Error(j.error??'The party connection is unavailable.');return j;
@@ -31,6 +31,18 @@ export function createGame(scene,camera,controls,{toast,onDance,stopDance,naviga
   byId('next-event').textContent=overlordPaused?'Overlord stopped · free roaming':nextEvent?'Next world event in '+Math.max(0,Math.ceil((Date.parse(nextEvent)-now)/1000))+'s':'The Overlord is waking up…';
  }
  byId('overlord-control').addEventListener('click',async()=>{const b=byId('overlord-control');b.disabled=true;try{await request('overlord-control',{paused:!overlordPaused});await refresh();toast(overlordPaused?'Overlord stopped':'Overlord resumed',overlordPaused?'Takeovers are paused for everyone. Run free!':'The next takeover starts in 20 seconds.');}catch(e){toast('Host control',e.message);}finally{b.disabled=false;}});
+ async function leaveParty(){
+  if(leaving||!me)return;leaving=true;movement.clear();byId('leave-confirm').disabled=true;byId('leave-confirm').textContent='Leaving…';
+  // Finish an in-flight position update before marking this guest inactive.
+  try{await Promise.race([pendingMove??Promise.resolve(),new Promise(resolve=>setTimeout(resolve,2500))]);await Promise.race([request('leave',{}),new Promise(resolve=>setTimeout(resolve,2500))]);}catch{}
+  localStorage.removeItem(tokenKey);me=null;token=null;
+  const url=new globalThis.URL(location.href);url.searchParams.set('join','1');location.replace(url.href);
+ }
+ byId('leave-button').addEventListener('click',()=>{byId('leave-host-note').hidden=!canHost;leaveDialog.showModal();});
+ byId('leave-cancel').addEventListener('click',()=>leaveDialog.close());
+ byId('leave-confirm').addEventListener('click',leaveParty);
+ // Signing out in one tab must also stop an already open copy from moving.
+ window.addEventListener('storage',e=>{if(e.key===tokenKey&&e.newValue!==token){me=null;token=null;location.reload();}});
  byId('join-button').addEventListener('click',()=>{if(me){byId('my-card').classList.toggle('expanded');return;}joinDialog.showModal();});
  byId('join-close').addEventListener('click',()=>joinDialog.close());
  byId('share-button').addEventListener('click',async()=>{shareDialog.showModal();const link=(location.hostname==='localhost'?'https://afterlife-halloween-afterparty.mirco1990.chatgpt.site':location.origin)+'/?join=1';byId('join-link').value=link;await QRCode.toCanvas(byId('join-qr'),link,{width:230,margin:2,color:{dark:'#1c1029',light:'#fff3df'}});});
@@ -45,22 +57,22 @@ export function createGame(scene,camera,controls,{toast,onDance,stopDance,naviga
  refresh();
  if(token)request('session',undefined,'GET').then(s=>enter(s.player,s.can_host)).catch(()=>{token=null;localStorage.removeItem(tokenKey);if(new URLSearchParams(location.search).has('join'))joinDialog.showModal();});
  else if(new URLSearchParams(location.search).has('join'))joinDialog.showModal();
- const interval=setInterval(()=>{renderEvent();if(Date.now()-lastPoll>15000){lastPoll=Date.now();refresh();}if(me&&!overlordPaused&&!tickPending&&Date.now()-lastTick>10000&&nextEvent&&Date.parse(nextEvent)<Date.now()+clockOffset){tickPending=true;lastTick=Date.now();request('tick',{}).then(r=>{if(r.event)refresh();}).catch(()=>{}).finally(()=>{tickPending=false;});}},1000);
+ const interval=setInterval(()=>{renderEvent();if(Date.now()-lastPoll>15000){lastPoll=Date.now();refresh();}if(me&&!leaving&&!overlordPaused&&!tickPending&&Date.now()-lastTick>10000&&nextEvent&&Date.parse(nextEvent)<Date.now()+clockOffset){tickPending=true;lastTick=Date.now();request('tick',{}).then(r=>{if(r.event)refresh();}).catch(()=>{}).finally(()=>{tickPending=false;});}},1000);
  window.addEventListener('blur',()=>movement.clear());
  window.addEventListener('pagehide',()=>{if(me)fetch(API+'leave',{method:'POST',headers:{'Content-Type':'application/json','x-player-token':token},body:'{}',keepalive:true}).catch(()=>{});clearInterval(interval);client.removeChannel(channel);});
  // Instanced toy pumpkins provide a visible global event without downloading assets.
  const rain=new T.InstancedMesh(new T.SphereGeometry(.4,8,6),new T.MeshStandardMaterial({color:'#ff8c16',roughness:.7}),60);rain.visible=false;scene.add(rain);const dummy=new T.Object3D();
  return {
-  isJoined:()=>Boolean(me),isTyping:()=>joinDialog.open||shareDialog.open,
+  isJoined:()=>Boolean(me),isTyping:()=>joinDialog.open||shareDialog.open||leaveDialog.open,
   update(dt,t,keys){
    const frozen=Boolean(!overlordPaused&&event&&Date.parse(event.expires_at)>Date.now()+clockOffset);
    document.body.classList.toggle('takeover',frozen);
-   if(me&&local){const previous={x:local.x,z:local.z};camera.getWorldDirection(direction);direction.y=0;direction.normalize();right.crossVectors(direction,camera.up).normalize();delta.set(0,0,0);
-    if(!frozen&&!joinDialog.open&&!shareDialog.open){if(keys.has('w')||keys.has('ArrowUp')||movement.has('up'))delta.add(direction);if(keys.has('s')||keys.has('ArrowDown')||movement.has('down'))delta.sub(direction);if(keys.has('a')||keys.has('ArrowLeft')||movement.has('left'))delta.sub(right);if(keys.has('d')||keys.has('ArrowRight')||movement.has('right'))delta.add(right);}
+   if(me&&local&&!leaving){const previous={x:local.x,z:local.z};camera.getWorldDirection(direction);direction.y=0;direction.normalize();right.crossVectors(direction,camera.up).normalize();delta.set(0,0,0);
+    if(!frozen&&!joinDialog.open&&!shareDialog.open&&!leaveDialog.open){if(keys.has('w')||keys.has('ArrowUp')||movement.has('up'))delta.add(direction);if(keys.has('s')||keys.has('ArrowDown')||movement.has('down'))delta.sub(direction);if(keys.has('a')||keys.has('ArrowLeft')||movement.has('left'))delta.sub(right);if(keys.has('d')||keys.has('ArrowRight')||movement.has('right'))delta.add(right);}
     if(delta.lengthSq()){delta.normalize().multiplyScalar(dt*5);navigation.move(local,delta.x,delta.z,.65);local.heading=Math.atan2(delta.x,delta.z);const dx=local.x-previous.x,dz=local.z-previous.z;camera.position.x+=dx;camera.position.z+=dz;controls.target.x+=dx;controls.target.z+=dz;}
     const chase=hunter.update(dt,t,local,frozen);byId('hunt-status').textContent=frozen?'AI takeover · movement paused':chase.grace?'Reaper incoming · run!':`Escape the Reaper · Caught ${chase.catches}`;
     if(chase.caught){const spawn=navigation.free(0,15,.65),dx=spawn.x-local.x,dz=spawn.z-local.z;Object.assign(local,spawn);camera.position.x+=dx;camera.position.z+=dz;controls.target.x+=dx;controls.target.z+=dz;hunter.reset(local,t);lastSend=0;toast('The Reaper caught you!','One more afterlife. Respawned in the plaza. Run!');}
-    const now=performance.now();if(!sending&&now-lastSend>(delta.lengthSq()?500:20000)){sending=true;lastSend=now;request('move',{...local,sequence:++sequence}).catch(()=>status('Reconnecting…')).finally(()=>sending=false);}
+    const now=performance.now();if(!sending&&now-lastSend>(delta.lengthSq()?500:20000)){sending=true;lastSend=now;pendingMove=request('move',{...local,sequence:++sequence}).catch(()=>status('Reconnecting…')).finally(()=>sending=false);}
    }
    avatars.update(dt,t,event,local);
    rain.visible=Boolean(event&&event.kind==='pumpkin_rain'&&Date.parse(event.expires_at)>Date.now()+clockOffset);if(rain.visible){for(let i=0;i<60;i++){dummy.position.set(Math.sin(i*33.7)*17,18-((t*4+i*.65)%18),Math.cos(i*17.1)*15+5);dummy.rotation.set(t+i,t*.7,0);dummy.scale.set(1,.8,1);dummy.updateMatrix();rain.setMatrixAt(i,dummy.matrix);}rain.instanceMatrix.needsUpdate=true;rain.computeBoundingSphere();}

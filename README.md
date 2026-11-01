@@ -6,7 +6,7 @@ A browser based Three.js town inspired by the marigolds, candlelight, papel pica
 
 [Open Afterlife](https://afterlife-halloween-afterparty.mirco1990.chatgpt.site/) or [join as a monster](https://afterlife-halloween-afterparty.mirco1990.chatgpt.site/?join=1).
 
-Use **QR / invite** on the projector to let phones join the same town. Players enter a nickname, choose their party energy and snack, and can add a selfie or object photo. No account registration is needed.
+Use **QR / invite** on the projector to let phones join the same town. Players enter a nickname, choose their party energy and snack, and can add a selfie or object photo. No account registration is needed. The browser remembers your guest pass until you use **Leave party** on your character card. Leaving removes the saved pass; the next join creates a new character. Host passes show a reminder before leaving because host controls belong to that guest session.
 
 OpenAI Decisions assigns a pumpkin, ghost or reaper identity. Image 2.5 generates a portrait asynchronously while a matching procedural 3D avatar enters the world. Other participants see nicknames, movement and emotes through Supabase Realtime.
 
@@ -83,6 +83,6 @@ The approved concept is saved in `docs/visual-target.png`. The image is a visual
 
 ## Credits
 
-Archived character illustrations from the initial prototype are from [KitBitz Halloween Kit](https://kitbitz.art/kits/halloween-kit), listed as CC0 by KitBitz. Exact asset names and sources are recorded in [ASSETS.md](ASSETS.md). The active scene now uses original procedural 3D monsters instead of those cutouts. Decorative skull textures, name labels and portrait cards remain 2D surfaces, as appropriate. Original procedural environment and concept art were created for this project.
+Archived character illustrations from the initial prototype are from [KitBitz Halloween Kit](https://kitbitz.art/kits/halloween-kit), listed as CC0 by KitBitz. Exact asset names and sources are recorded in [ASSETS.md](ASSETS.md). The active scene now uses original procedural 3D monsters instead of those cutouts. Eighteen ambient guests independently choose destinations, walk along collision checked routes, rest briefly and continue roaming. Their movement runs locally without extra API calls. Decorative skull textures, name labels and portrait cards remain 2D surfaces, as appropriate. Original procedural environment and concept art were created for this project.
 
 Built with Three.js and Vite. Fonts: Rye and Barlow from Google Fonts.
