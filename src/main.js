@@ -55,7 +55,7 @@ function animate(now){const dt=Math.min((now-last)/1000,.05);last=now;if(!paused
   if(keys.size){camera.getWorldDirection(forward);forward.y=0;forward.normalize();right.crossVectors(forward,camera.up).normalize();move.set(0,0,0);if(keys.has('w')||keys.has('ArrowUp'))move.add(forward);if(keys.has('s')||keys.has('ArrowDown'))move.sub(forward);if(keys.has('d')||keys.has('ArrowRight'))move.add(right);if(keys.has('a')||keys.has('ArrowLeft'))move.sub(right);move.normalize().multiplyScalar(dt*10);camera.position.add(move);controls.target.add(move);}
   controls.target.x=THREE.MathUtils.clamp(controls.target.x,-52,52);controls.target.z=THREE.MathUtils.clamp(controls.target.z,-30,55);
   controls.update();world.update(t);characters.update(t);renderer.info.reset();composer.render();
-  sampleFrames++;if(now-sampleStart>5000){console.info("AFTERLIFE render",JSON.stringify({fps:Math.round(sampleFrames*1000/(now-sampleStart)),triangles:renderer.info.render.triangles,calls:renderer.info.render.calls,flowers:world.counts.flowers,guests:characters.count}));sampleFrames=0;sampleStart=now;}
+  sampleFrames++;if(import.meta.env.DEV&&now-sampleStart>5000){console.info("AFTERLIFE render",JSON.stringify({fps:Math.round(sampleFrames*1000/(now-sampleStart)),triangles:renderer.info.render.triangles,calls:renderer.info.render.calls,flowers:world.counts.flowers,guests:characters.count}));sampleFrames=0;sampleStart=now;}
   if(frames++===3){document.querySelector('#loading').classList.add('loaded');setTimeout(()=>{document.querySelector('#loading').hidden=true;},750);renderer.shadowMap.autoUpdate=false;}
   requestAnimationFrame(animate);
 }
