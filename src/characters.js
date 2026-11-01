@@ -44,7 +44,7 @@ export function createCharacters(scene, camera) {
   return {
     count: actors.length,
     meshes: actors.map(a=>a.mesh),
-    startParty(t) {partyUntil=t+10;},
+    startParty(t,duration=10) {partyUntil=t+duration;},
     quote(mesh) {
       const kind=mesh.userData.kind, pool=quotes[kind];
       return {name:kind==='reaper'?'Grim, off duty':kind==='ghost'?'A social spirit':'Pumpkin, party guest',text:pool[Math.floor(Math.random()*pool.length)]};

@@ -6,6 +6,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { createWorld } from './world.js';
 import { createCharacters } from './characters.js';
+import { createGame } from './game.js';
 import './style.css';
 
 const host=document.querySelector('#world');
@@ -34,12 +35,12 @@ document.querySelector('#tour').addEventListener('click',()=>{tour=!tour;transit
 document.querySelector('#fullscreen').addEventListener('click',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{document.querySelector('#hint').textContent='Fullscreen is unavailable in this browser.';}});
 function toggleUI(){hidden=!hidden;document.body.classList.toggle('ui-hidden',hidden);document.querySelector('#restore-ui').hidden=!hidden;}
 document.querySelector('#hide-ui').addEventListener('click',toggleUI);document.querySelector('#restore-ui').addEventListener('click',toggleUI);
-window.addEventListener('keydown',e=>{if(e.key.toLowerCase()==='h')toggleUI();if(e.key==='1')selectView('plaza');if(e.key==='2')selectView('ofrenda');if(e.key==='3')selectView('arch');if(e.key==='4')selectView('above');});
+window.addEventListener('keydown',e=>{if(e.target.matches('input,select,textarea'))return;if(e.key.toLowerCase()==='h')toggleUI();if(e.key==='1')selectView('plaza');if(e.key==='2')selectView('ofrenda');if(e.key==='3')selectView('arch');if(e.key==='4')selectView('above');});
 window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);composer.setSize(innerWidth,innerHeight);});
 if(innerWidth<700){camera.position.set(15,15,37);controls.target.set(0,3,-6);document.querySelector('#hint').textContent='Drag to look around · Pinch to explore';}
 let frames=0, sampleStart=performance.now(), sampleFrames=0;
 const keys=new Set(), move=new THREE.Vector3(), forward=new THREE.Vector3(), right=new THREE.Vector3();
-window.addEventListener('keydown',e=>{if(['w','a','s','d','ArrowUp','ArrowLeft','ArrowDown','ArrowRight'].includes(e.key)){keys.add(e.key);e.preventDefault();transition=null;tour=false;document.querySelector('#tour').setAttribute('aria-pressed','false');}});
+window.addEventListener('keydown',e=>{if(e.target.matches('input,select,textarea'))return;if(['w','a','s','d','ArrowUp','ArrowLeft','ArrowDown','ArrowRight'].includes(e.key)){keys.add(e.key);e.preventDefault();transition=null;tour=false;document.querySelector('#tour').setAttribute('aria-pressed','false');}});
 window.addEventListener('keyup',e=>keys.delete(e.key));
 window.addEventListener('blur',()=>keys.clear());
 const raycaster=new THREE.Raycaster(), pointer=new THREE.Vector2();
@@ -48,13 +49,14 @@ renderer.domElement.addEventListener('pointerdown',e=>{pointerStart={x:e.clientX
 renderer.domElement.addEventListener('pointerup',e=>{if(!pointerStart||Math.hypot(e.clientX-pointerStart.x,e.clientY-pointerStart.y)>6)return;const rect=renderer.domElement.getBoundingClientRect();pointer.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(pointer,camera);const hit=raycaster.intersectObjects(characters.meshes)[0];if(hit){const quote=characters.quote(hit.object);showToast(quote.name,quote.text);}});
 function showToast(name,text){document.querySelector('#guest-name').textContent=name;document.querySelector('#guest-quote').textContent=text;document.querySelector('#guest-toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>{document.querySelector('#guest-toast').hidden=true;},5000);}
 document.querySelector('#dance').addEventListener('click',()=>{paused=false;motionButton.textContent='Pause motion';motionButton.setAttribute('aria-label','Pause motion');characters.startParty(t);showToast('The afterparty has started','Ten seconds. No pulse. All rhythm.');});
+const game=createGame(scene,camera,controls,{toast:showToast,onDance:duration=>{paused=false;characters.startParty(t,duration);motionButton.textContent='Pause motion';motionButton.setAttribute('aria-label','Pause motion');}});
 renderer.info.autoReset=false;
 function animate(now){const dt=Math.min((now-last)/1000,.05);last=now;if(!paused)t+=dt;
   if(transition){const f=Math.min((now-transition.start)/transition.duration,1),e=1-Math.pow(1-f,4);camera.position.lerpVectors(transition.from,transition.to,e);controls.target.lerpVectors(transition.targetFrom,transition.targetTo,e);if(f===1)transition=null;}
   if(tour){camera.position.set(Math.sin(t*.09)*25,11+Math.sin(t*.04)*3,Math.cos(t*.09)*24+1);controls.target.set(0,4,-7);}
-  if(keys.size){camera.getWorldDirection(forward);forward.y=0;forward.normalize();right.crossVectors(forward,camera.up).normalize();move.set(0,0,0);if(keys.has('w')||keys.has('ArrowUp'))move.add(forward);if(keys.has('s')||keys.has('ArrowDown'))move.sub(forward);if(keys.has('d')||keys.has('ArrowRight'))move.add(right);if(keys.has('a')||keys.has('ArrowLeft'))move.sub(right);move.normalize().multiplyScalar(dt*10);camera.position.add(move);controls.target.add(move);}
+  if(keys.size&&!game.isJoined()&&!game.isTyping()){camera.getWorldDirection(forward);forward.y=0;forward.normalize();right.crossVectors(forward,camera.up).normalize();move.set(0,0,0);if(keys.has('w')||keys.has('ArrowUp'))move.add(forward);if(keys.has('s')||keys.has('ArrowDown'))move.sub(forward);if(keys.has('d')||keys.has('ArrowRight'))move.add(right);if(keys.has('a')||keys.has('ArrowLeft'))move.sub(right);move.normalize().multiplyScalar(dt*10);camera.position.add(move);controls.target.add(move);}
   controls.target.x=THREE.MathUtils.clamp(controls.target.x,-52,52);controls.target.z=THREE.MathUtils.clamp(controls.target.z,-30,55);
-  controls.update();world.update(t);characters.update(t);renderer.info.reset();composer.render();
+  game.update(dt,now/1000,keys);controls.update();world.update(t);characters.update(t);renderer.info.reset();composer.render();
   sampleFrames++;if(import.meta.env.DEV&&now-sampleStart>5000){console.info("AFTERLIFE render",JSON.stringify({fps:Math.round(sampleFrames*1000/(now-sampleStart)),triangles:renderer.info.render.triangles,calls:renderer.info.render.calls,flowers:world.counts.flowers,guests:characters.count}));sampleFrames=0;sampleStart=now;}
   if(frames++===3){document.querySelector('#loading').classList.add('loaded');setTimeout(()=>{document.querySelector('#loading').hidden=true;},750);renderer.shadowMap.autoUpdate=false;}
   requestAnimationFrame(animate);
