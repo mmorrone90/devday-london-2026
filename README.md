@@ -10,7 +10,7 @@ Use **QR / invite** on the projector to let phones join the same town. Players e
 
 OpenAI Decisions assigns a pumpkin, ghost or reaper identity. Image 2.5 generates a portrait asynchronously while a matching procedural 3D avatar enters the world. Other participants see nicknames, movement and emotes through Supabase Realtime.
 
-The AI Overlord chooses a shared event every 60 seconds while players are connected: a pumpkin takeover, a ghost dance or a monster election. Elections allow one vote per guest, which can be changed until voting closes. If OpenAI is unavailable, the app labels the party draw or scheduled host fallback explicitly.
+The AI Overlord chooses a shared event every 20 seconds while players are connected: a pumpkin takeover, a ghost dance or a monster election. Elections allow one vote per guest, which can be changed until voting closes. If OpenAI is unavailable, the app labels the party draw or scheduled host fallback explicitly.
 
 ## Run locally
 
@@ -52,7 +52,7 @@ npm run preview
 | Image 2.5 portrait generation | Live tested with gpt-image-2.5-flare, with and without an image input |
 | Shared player movement, nicknames and emotes | Implemented; two independent Realtime clients verified |
 | Matching predefined 3D monster avatars | Implemented for pumpkin, ghost and reaper |
-| AI Overlord events every 60 seconds | Implemented; live Decisions event tested |
+| AI Overlord events every 20 seconds | Implemented; live Decisions event tested |
 | Expanded town and animated KitBitz atmosphere | Implemented |
 
 The demo is not load tested for 1,000 concurrent players. Movement is persisted at up to two updates per second per moving player, with interpolation and a display cap of 100 player avatars. High attendance will require spatial channels and a dedicated movement transport.

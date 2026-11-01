@@ -9,8 +9,8 @@ const kinds=['pumpkin','ghost','reaper'];
 const titles={pumpkin:'Chief Pumpkin Officer',ghost:'Senior Boo Developer',reaper:'Head of Deadlines'};
 const colors={pumpkin:'#f79c28',ghost:'#91e9d7',reaper:'#ac8bf5'};
 const eventCopy={
- pumpkin_rain:{title:'Pumpkin takeover',message:'Everyone is a pumpkin for 30 seconds. Management calls this a reorg.'},
- ghost_dance:{title:'The dead can dance',message:'No pulse. All rhythm. The entire town has 30 seconds to dance.'},
+ pumpkin_rain:{title:'Pumpkin takeover',message:'Everyone is a pumpkin for 15 seconds. Management calls this a reorg.'},
+ ghost_dance:{title:'The dead can dance',message:'No pulse. All rhythm. The entire town has 15 seconds to dance.'},
  monster_election:{title:'Elect the mayor of Afterlife',message:'Pumpkin, Ghost or Reaper? Vote for the least terrifying management style.'},
 };
 const iso=()=>new Date().toISOString();
@@ -77,15 +77,15 @@ async function portrait(id:string,image:string|null){
 }
 async function tick(){
  const {data:claimed,error}=await db.rpc('afterlife_claim_tick');if(error)fail('The Overlord is reconnecting.',503);if(!claimed)return {claimed:false};
- const snapshot=await state();let eventKind=Object.keys(eventCopy)[Math.floor(Date.now()/60000)%3],source='party_host';
+ const snapshot=await state();let eventKind=Object.keys(eventCopy)[Math.floor(Date.now()/20000)%3],source='party_host';
  try{const picked=await decision('event','Choose the funniest safe event for this shared fictional monster town. Consider faction balance and the previous event; prefer variety. The choice will run predefined game code.',[
- {value:'pumpkin_rain',description:'Turn every player into a pumpkin and rain toy pumpkins for 30 seconds.'},
- {value:'ghost_dance',description:'Every monster dances together for 30 seconds.'},
- {value:'monster_election',description:'Hold a 45 second election for pumpkin, ghost or reaper mayor.'}],{counts:Object.fromEntries(kinds.map(k=>[k,snapshot.players.filter(p=>p.kind===k).length])),previous:snapshot.event?.kind});if(picked){eventKind=picked;source='openai_decisions';}}catch{console.warn('Event decision temporarily unavailable');}
+ {value:'pumpkin_rain',description:'Turn every player into a pumpkin and rain toy pumpkins for 15 seconds.'},
+ {value:'ghost_dance',description:'Every monster dances together for 15 seconds.'},
+ {value:'monster_election',description:'Hold a 15 second election for pumpkin, ghost or reaper mayor.'}],{counts:Object.fromEntries(kinds.map(k=>[k,snapshot.players.filter(p=>p.kind===k).length])),previous:snapshot.event?.kind});if(picked){eventKind=picked;source='openai_decisions';}}catch{console.warn('Event decision temporarily unavailable');}
  const start=Date.now(),copy=eventCopy[eventKind as keyof typeof eventCopy];
- const {data:event,error:eventError}=await db.from('afterlife_events').insert({kind:eventKind,...copy,source,starts_at:new Date(start).toISOString(),expires_at:new Date(start+(eventKind==='monster_election'?45000:30000)).toISOString()}).select().single();
+ const {data:event,error:eventError}=await db.from('afterlife_events').insert({kind:eventKind,...copy,source,starts_at:new Date(start).toISOString(),expires_at:new Date(start+15000).toISOString()}).select().single();
  if(eventError)fail('Could not start the event.',503);
- await db.from('afterlife_state').update({event_id:event.id,next_event_at:new Date(start+60000).toISOString(),tick_locked_until:iso()}).eq('id','plaza');
+ await db.from('afterlife_state').update({event_id:event.id,next_event_at:new Date(start+20000).toISOString(),tick_locked_until:iso()}).eq('id','plaza');
  return {claimed:true,event};
 }
 Deno.serve(async req=>{
