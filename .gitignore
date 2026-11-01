@@ -4,3 +4,5 @@ dist/
 !.env.example
 .DS_Store
 .openai/local/
+
+supabase/.temp/

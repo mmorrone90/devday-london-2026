@@ -11,14 +11,14 @@ const byId=id=>document.getElementById(id);
 const icons={pumpkin:'🎃',ghost:'👻',reaper:'💀'};
 export function createGame(scene,camera,controls,{toast,onDance}){
  const avatars=createPlayerAvatars(scene),players=new Map();
- let me=null,local=null,token=localStorage.getItem(tokenKey),event=null,nextEvent=null,photo=null,sequence=0,lastSend=0,sending=false,lastPoll=0,eventSeen=null,connected=false,voteTally={},clockOffset=0;
+ let me=null,local=null,token=localStorage.getItem(tokenKey),event=null,nextEvent=null,photo=null,sequence=0,lastSend=0,sending=false,lastPoll=0,eventSeen=null,connected=false,voteTally={},clockOffset=0,lastTick=0,tickPending=false;
  const movement=new Set(),direction=new T.Vector3(),right=new T.Vector3(),delta=new T.Vector3();
  const joinDialog=byId('join-dialog'),shareDialog=byId('share-dialog');
  function status(text){byId('connection-status').textContent=text;}
  async function request(action,body,method='POST'){
   const r=await fetch(API+action,{method,headers:{'Content-Type':'application/json',...(token?{'x-player-token':token}:{})},...(body===undefined?{}:{body:JSON.stringify(body)})});let j;try{j=await r.json();}catch{throw new Error('The party connection is unavailable.');}if(!r.ok)throw new Error(j.error??'The party connection is unavailable.');return j;
  }
- function updatePlayer(p){players.set(p.id,p);avatars.upsert(p);if(me?.id===p.id){me={...me,...p};sequence=Math.max(sequence,p.sequence);renderCard();}renderCount();}
+ function updatePlayer(p){if(p.id!==me?.id&&Date.parse(p.updated_at)<Date.now()+clockOffset-65000){players.delete(p.id);avatars.remove(p.id);renderCount();return;}players.set(p.id,p);avatars.upsert(p);if(me?.id===p.id){me={...me,...p};sequence=Math.max(sequence,p.sequence);renderCard();}renderCount();}
  function renderCount(){byId('player-count').textContent=`${players.size} ${players.size===1?'soul':'souls'} in town`;}
  function renderCard(){if(!me)return;byId('my-nickname').textContent=me.nickname;byId('my-title').textContent=me.title;byId('my-source').textContent=me.assignment_source==='openai_decisions'?'Chosen by OpenAI Decisions':'Party draw · AI unavailable';byId('my-icon').textContent=icons[me.kind];const portrait=byId('my-portrait');if(me.portrait_url){portrait.src=me.portrait_url;portrait.hidden=false;byId('my-icon').hidden=true;}byId('portrait-status').textContent=me.portrait_status==='generating'?'Your AI portrait is being painted…':me.portrait_status==='ready'?'Portrait by Image 2.5':me.portrait_status==='failed'?'Portrait unavailable. Your monster is ready to play.':'';}
  function enter(p){me=p;local={x:p.x,z:p.z,heading:p.heading};sequence=p.sequence;avatars.setSelf(p.id);updatePlayer(p);joinDialog.close();document.body.classList.add('joined');byId('join-button').textContent='My monster';camera.position.set(p.x+7,10,p.z+13);controls.target.set(p.x,1.4,p.z);toast('Welcome to Afterlife',`${p.nickname}, ${p.title}. Use the arrow pad or WASD to move.`);}
@@ -29,7 +29,7 @@ export function createGame(scene,camera,controls,{toast,onDance}){
  }
  byId('join-button').addEventListener('click',()=>{if(me){byId('my-card').classList.toggle('expanded');return;}joinDialog.showModal();});
  byId('join-close').addEventListener('click',()=>joinDialog.close());
- byId('share-button').addEventListener('click',async()=>{shareDialog.showModal();const link=location.origin+'/?join=1';byId('join-link').value=link;await QRCode.toCanvas(byId('join-qr'),link,{width:230,margin:2,color:{dark:'#1c1029',light:'#fff3df'}});});
+ byId('share-button').addEventListener('click',async()=>{shareDialog.showModal();const link=(location.hostname==='localhost'?'https://afterlife-halloween-afterparty.mirco1990.chatgpt.site':location.origin)+'/?join=1';byId('join-link').value=link;await QRCode.toCanvas(byId('join-qr'),link,{width:230,margin:2,color:{dark:'#1c1029',light:'#fff3df'}});});
  byId('share-close').addEventListener('click',()=>shareDialog.close());
  byId('copy-link').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(byId('join-link').value);byId('copy-link').textContent='Copied';}catch{byId('join-link').select();}});
  byId('selfie').addEventListener('change',async e=>{photo=null;byId('selfie-preview').hidden=true;const file=e.target.files?.[0];if(!file)return;if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10*1024*1024){byId('join-error').textContent='Choose a JPEG, PNG or WebP photo smaller than 10 MB.';e.target.value='';return;}try{const bitmap=await createImageBitmap(file),c=document.createElement('canvas'),ratio=Math.min(1,512/Math.max(bitmap.width,bitmap.height));c.width=Math.round(bitmap.width*ratio);c.height=Math.round(bitmap.height*ratio);c.getContext('2d').drawImage(bitmap,0,0,c.width,c.height);bitmap.close();photo=c.toDataURL('image/jpeg',.8);byId('selfie-preview').src=photo;byId('selfie-preview').hidden=false;byId('join-error').textContent='';}catch{byId('join-error').textContent='Could not read this photo. Try another image.';}});
@@ -41,7 +41,7 @@ export function createGame(scene,camera,controls,{toast,onDance}){
  refresh();
  if(token)request('session',undefined,'GET').then(s=>enter(s.player)).catch(()=>{token=null;localStorage.removeItem(tokenKey);if(new URLSearchParams(location.search).has('join'))joinDialog.showModal();});
  else if(new URLSearchParams(location.search).has('join'))joinDialog.showModal();
- const interval=setInterval(()=>{renderEvent();if(Date.now()-lastPoll>15000){lastPoll=Date.now();refresh();}if(me&&nextEvent&&Date.parse(nextEvent)<Date.now()+clockOffset){request('tick',{}).then(r=>{if(r.event)refresh();}).catch(()=>{});}},1000);
+ const interval=setInterval(()=>{renderEvent();if(Date.now()-lastPoll>15000){lastPoll=Date.now();refresh();}if(me&&!tickPending&&Date.now()-lastTick>10000&&nextEvent&&Date.parse(nextEvent)<Date.now()+clockOffset){tickPending=true;lastTick=Date.now();request('tick',{}).then(r=>{if(r.event)refresh();}).catch(()=>{}).finally(()=>{tickPending=false;});}},1000);
  window.addEventListener('blur',()=>movement.clear());
  window.addEventListener('pagehide',()=>{if(me)fetch(API+'leave',{method:'POST',headers:{'Content-Type':'application/json','x-player-token':token},body:'{}',keepalive:true}).catch(()=>{});clearInterval(interval);client.removeChannel(channel);});
  // Instanced toy pumpkins provide a visible global event without downloading assets.

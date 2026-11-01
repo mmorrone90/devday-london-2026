@@ -77,7 +77,7 @@ async function portrait(id:string,image:string|null){
 }
 async function tick(){
  const {data:claimed,error}=await db.rpc('afterlife_claim_tick');if(error)fail('The Overlord is reconnecting.',503);if(!claimed)return {claimed:false};
- const snapshot=await state();let eventKind=Object.keys(eventCopy)[Math.floor(Date.now()/180000)%3],source='party_host';
+ const snapshot=await state();let eventKind=Object.keys(eventCopy)[Math.floor(Date.now()/60000)%3],source='party_host';
  try{const picked=await decision('event','Choose the funniest safe event for this shared fictional monster town. Consider faction balance and the previous event; prefer variety. The choice will run predefined game code.',[
  {value:'pumpkin_rain',description:'Turn every player into a pumpkin and rain toy pumpkins for 30 seconds.'},
  {value:'ghost_dance',description:'Every monster dances together for 30 seconds.'},
@@ -85,7 +85,7 @@ async function tick(){
  const start=Date.now(),copy=eventCopy[eventKind as keyof typeof eventCopy];
  const {data:event,error:eventError}=await db.from('afterlife_events').insert({kind:eventKind,...copy,source,starts_at:new Date(start).toISOString(),expires_at:new Date(start+(eventKind==='monster_election'?45000:30000)).toISOString()}).select().single();
  if(eventError)fail('Could not start the event.',503);
- await db.from('afterlife_state').update({event_id:event.id,next_event_at:new Date(start+180000).toISOString(),tick_locked_until:iso()}).eq('id','plaza');
+ await db.from('afterlife_state').update({event_id:event.id,next_event_at:new Date(start+60000).toISOString(),tick_locked_until:iso()}).eq('id','plaza');
  return {claimed:true,event};
 }
 Deno.serve(async req=>{
